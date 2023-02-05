@@ -119,6 +119,28 @@ float FBM(vec3 p) {
   }
   return value;
 }
+
+uniform sampler2D noiseTexture;
+
+float FBMTexture (vec3 p) {
+  float value = 0.0;
+  float amplitude = 0.5;
+  float frequency = 0.0;
+  for (int i = 0; i < 8; ++i) {
+
+    vec3 point = fract(p);
+
+    float t1 = texture2D(noiseTexture, point.xz).y;
+    float t2 = texture2D(noiseTexture, point.xy).y;
+
+    float v = (t1 + t2) * 0.5;
+
+    value += amplitude * v;
+    p *= 2.0;
+    amplitude *= 0.5;
+  }
+  return value;
+}
 `;
 
 
@@ -127,7 +149,7 @@ class FogDemo {
     this.Initialize_();
   }
 
-  Initialize_() {
+  async Initialize_() {
 
     THREE.ShaderChunk.fog_fragment = `
     #ifdef USE_FOG
@@ -137,8 +159,11 @@ class FogDemo {
 
       // f(p) = fbm( p + fbm( p ) )
       vec3 noiseSampleCoord = vWorldPosition * 0.00025 + vec3(
-          0.0, 0.0, fogTime * 0.025);
-      float noiseSample = FBM(noiseSampleCoord + FBM(noiseSampleCoord)) * 0.5 + 0.5;
+        fogTime * 0.025, 0.0, fogTime * 0.025); // 0.0, 0.0, fogTime * 0.025);
+
+      // float noiseSample = FBM(noiseSampleCoord + FBM(noiseSampleCoord)) * 0.5 + 0.5;
+      float noiseSample = FBMTexture(noiseSampleCoord + FBMTexture(noiseSampleCoord)) * 0.5 + 0.5;
+      
       fogDepth *= mix(noiseSample, 1.0, saturate((fogDepth - 5000.0) / 5000.0));
       fogDepth *= fogDepth;
 
@@ -221,9 +246,15 @@ class FogDemo {
     controls.target.set(0, 20, 0);
     controls.update();
 
+    // const fbm = await new THREE.TextureLoader().load('./fbm3.png');
+    const simplex = await new THREE.TextureLoader().load('./simplex8.png');
+
+    simplex.wrapS = simplex.wrapT = THREE.RepeatWrapping;
+
     this.shaders_ = [];
     const ModifyShader_ = (s) => {
       this.shaders_.push(s);
+      s.uniforms.noiseTexture = {value: simplex};
       s.uniforms.fogTime = {value: 0.0};
     }
 
